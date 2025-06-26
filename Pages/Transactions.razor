@@ -1,0 +1,197 @@
+﻿@page "/transactions"
+@using BudgetTracker.Models
+@using BudgetTracker.Data
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject UserManager<IdentityUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>My Transactions</PageTitle>
+
+<div class="container mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-chart-line"></i> My Transactions</h2>
+                <a href="/add-transaction" class="btn btn-primary btn-lg">
+                    <i class="fas fa-plus"></i> Add Transaction
+                </a>
+            </div>
+        </div>
+    </div>
+
+    @if (transactions == null)
+    {
+        <!-- Loading -->
+        <div class="text-center">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading your transactions...</p>
+        </div>
+    }
+    else if (!transactions.Any())
+    {
+        <!-- No transactions -->
+        <div class="row">
+            <div class="col-md-8 mx-auto">
+                <div class="card text-center">
+                    <div class="card-body py-5">
+                        <i class="fas fa-wallet fa-3x text-muted mb-3"></i>
+                        <h4>No transactions yet</h4>
+                        <p class="text-muted">Start tracking your finances by adding your first transaction!</p>
+                        <a href="/add-transaction" class="btn btn-primary btn-lg">
+                            <i class="fas fa-plus"></i> Add Your First Transaction
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-4 mb-3">
+                <div class="card bg-success text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title">Total Income</h6>
+                                <h3 class="mb-0">@totalIncome.ToString("C")</h3>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-arrow-up fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card bg-danger text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title">Total Expenses</h6>
+                                <h3 class="mb-0">@totalExpenses.ToString("C")</h3>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-arrow-down fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card @(balance >= 0 ? "bg-primary" : "bg-warning") text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title">Net Balance</h6>
+                                <h3 class="mb-0">@balance.ToString("C")</h3>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas @(balance >= 0 ? "fa-chart-line" : "fa-exclamation-triangle") fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transactions Table -->
+        <div class="card shadow">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Recent Transactions (@transactions.Count total)</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Category</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var transaction in transactions)
+                            {
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">@transaction.Date.ToString("MMM dd, yyyy")</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge @(transaction.Type == TransactionType.Income ? "bg-success" : "bg-danger")">
+                                            @(transaction.Type == TransactionType.Income ? "💰" : "💸") @transaction.Type
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <strong>@transaction.Description</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">@transaction.Category</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <strong class="@(transaction.Type == TransactionType.Income ? "text-success" : "text-danger")">
+                                            @(transaction.Type == TransactionType.Income ? "+" : "-")@transaction.Amount.ToString("C")
+                                        </strong>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Transaction>? transactions;
+    private decimal totalIncome = 0;
+    private decimal totalExpenses = 0;
+    private decimal balance = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTransactions();
+    }
+
+    private async Task LoadTransactions()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = await UserManager.GetUserAsync(authState.User);
+            
+            if (user != null)
+            {
+                transactions = await DbContext.Transactions
+                    .Where(t => t.UserId == user.Id)
+                    .OrderByDescending(t => t.Date)
+                    .ThenByDescending(t => t.CreatedAt)
+                    .ToListAsync();
+
+                // Calculate summaries
+                totalIncome = transactions.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
+                totalExpenses = transactions.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+                balance = totalIncome - totalExpenses;
+            }
+            else
+            {
+                transactions = new List<Transaction>();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle error - for now just initialize empty list
+            transactions = new List<Transaction>();
+        }
+    }
+}

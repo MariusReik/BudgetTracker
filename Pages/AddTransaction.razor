@@ -1,0 +1,149 @@
+﻿@page "/add-transaction"
+@using BudgetTracker.Models
+@using BudgetTracker.Data
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject UserManager<IdentityUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Add Transaction</PageTitle>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-plus-circle"></i> Add New Transaction
+                    </h4>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(message))
+                    {
+                        <div class="alert @(isSuccess ? "alert-success" : "alert-danger") alert-dismissible fade show" role="alert">
+                            @message
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <EditForm Model="transaction" OnValidSubmit="OnValidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger mb-3" />
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="type" class="form-label">Transaction Type *</label>
+                                <InputSelect id="type" class="form-select" @bind-Value="transaction.Type">
+                                    <option value="">-- Select Type --</option>
+                                    <option value="@TransactionType.Income">💰 Income</option>
+                                    <option value="@TransactionType.Expense">💸 Expense</option>
+                                </InputSelect>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="amount" class="form-label">Amount *</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <InputNumber id="amount" class="form-control" @bind-Value="transaction.Amount"
+                                                 step="0.01" min="0.01" placeholder="0.00" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description *</label>
+                            <InputText id="description" class="form-control" @bind-Value="transaction.Description"
+                                       maxlength="200" placeholder="Enter transaction description..." />
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="category" class="form-label">Category *</label>
+                                <InputSelect id="category" class="form-select" @bind-Value="transaction.Category">
+                                    <option value="">-- Select Category --</option>
+                                    <option value="Food">🍕 Food</option>
+                                    <option value="Transportation">🚗 Transportation</option>
+                                    <option value="Housing">🏠 Housing</option>
+                                    <option value="Entertainment">🎬 Entertainment</option>
+                                    <option value="Healthcare">🏥 Healthcare</option>
+                                    <option value="Salary">💼 Salary</option>
+                                    <option value="Shopping">🛍️ Shopping</option>
+                                    <option value="Other">📝 Other</option>
+                                </InputSelect>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="date" class="form-label">Date *</label>
+                                <InputDate id="date" class="form-control" @bind-Value="transaction.Date" />
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-secondary me-md-2" @onclick="Cancel">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Add Transaction
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Transaction transaction = new();
+    private string message = string.Empty;
+    private bool isSuccess = false;
+
+    protected override void OnInitialized()
+    {
+        transaction.Date = DateTime.Today;
+    }
+
+    private async Task OnValidSubmit()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = await UserManager.GetUserAsync(authState.User);
+
+            if (user != null)
+            {
+                transaction.UserId = user.Id;
+                DbContext.Transactions.Add(transaction);
+                await DbContext.SaveChangesAsync();
+
+                message = "Transaction added successfully! 🎉";
+                isSuccess = true;
+
+                // Clear form
+                transaction = new Transaction { Date = DateTime.Today };
+
+                // Navigate after a short delay to show success message
+                await Task.Delay(2000);
+                Navigation.NavigateTo("/transactions");
+            }
+            else
+            {
+                message = "You must be logged in to add transactions.";
+                isSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Error saving transaction: {ex.Message}";
+            isSuccess = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/");
+    }
+}

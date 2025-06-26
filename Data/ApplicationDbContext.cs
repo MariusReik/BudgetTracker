@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using BudgetTracker.Models;
+
 
 namespace BudgetTracker.Data
 {
@@ -9,5 +11,7 @@ namespace BudgetTracker.Data
             : base(options)
         {
         }
+        public DbSet<Transaction> Transactions { get; set; } = default!;
+
     }
 }

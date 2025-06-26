@@ -1,9 +1,373 @@
 ﻿@page "/"
+@using BudgetTracker.Models
+@using BudgetTracker.Data
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject UserManager<IdentityUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
 
-<PageTitle>Index</PageTitle>
+<PageTitle>Dashboard - BudgetTracker</PageTitle>
 
-<h1>Hello, world!</h1>
+<AuthorizeView>
+    <Authorized>
+        <!-- User is logged in - show dashboard -->
+        <div class="container-fluid mt-4">
+            <!-- Welcome Section -->
+            <div class="row mb-4">
+                <div class="col">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h2>💰 Welcome back, @context.User.Identity?.Name!</h2>
+                            <p class="text-muted">Here's your financial overview</p>
+                        </div>
+                        <div>
+                            <a href="/add-transaction" class="btn btn-primary btn-lg">
+                                <i class="fas fa-plus"></i> Quick Add
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-Welcome to your new app.
+            @if (isLoading)
+            {
+                <!-- Loading State -->
+                <div class="text-center">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading your dashboard...</p>
+                </div>
+            }
+            else
+            {
+                <!-- Financial Overview Cards -->
+                <div class="row mb-4">
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card bg-success text-white h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="card-title">💰 This Month Income</h6>
+                                        <h4 class="mb-0">@monthlyIncome.ToString("C")</h4>
+                                        <small>@totalIncome.ToString("C") total</small>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-arrow-up fa-2x opacity-75"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-<SurveyPrompt Title="How is Blazor working for you?" />
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card bg-danger text-white h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="card-title">💸 This Month Expenses</h6>
+                                        <h4 class="mb-0">@monthlyExpenses.ToString("C")</h4>
+                                        <small>@totalExpenses.ToString("C") total</small>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-arrow-down fa-2x opacity-75"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card @(balance >= 0 ? "bg-primary" : "bg-warning") text-white h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="card-title">📊 Net Balance</h6>
+                                        <h4 class="mb-0">@balance.ToString("C")</h4>
+                                        <small>@(balance >= 0 ? "You're ahead!" : "Budget carefully")</small>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas @(balance >= 0 ? "fa-chart-line" : "fa-exclamation-triangle") fa-2x opacity-75"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card bg-info text-white h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="card-title">📈 Transactions</h6>
+                                        <h4 class="mb-0">@totalTransactions</h4>
+                                        <small>@thisMonthTransactions this month</small>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-list fa-2x opacity-75"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (transactions.Any())
+                {
+                    <div class="row">
+                        <!-- Recent Transactions -->
+                        <div class="col-lg-8 mb-4">
+                            <div class="card shadow">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">📋 Recent Transactions</h5>
+                                    <a href="/transactions" class="btn btn-outline-primary btn-sm">View All</a>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Description</th>
+                                                    <th>Category</th>
+                                                    <th class="text-end">Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var transaction in recentTransactions)
+                                                {
+                                                    <tr>
+                                                        <td>
+                                                            <small class="text-muted">@transaction.Date.ToString("MMM dd")</small>
+                                                        </td>
+                                                        <td>
+                                                            <strong>@transaction.Description</strong>
+                                                            <br>
+                                                            <small class="badge @(transaction.Type == TransactionType.Income ? "bg-success" : "bg-danger")">
+                                                                @transaction.Type
+                                                            </small>
+                                                        </td>
+                                                        <td>
+                                                            <span class="badge bg-secondary">@transaction.Category</span>
+                                                        </td>
+                                                        <td class="text-end">
+                                                            <strong class="@(transaction.Type == TransactionType.Income ? "text-success" : "text-danger")">
+                                                                @(transaction.Type == TransactionType.Income ? "+" : "-")@transaction.Amount.ToString("C")
+                                                            </strong>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions & Stats -->
+                        <div class="col-lg-4 mb-4">
+                            <!-- Quick Actions -->
+                            <div class="card shadow mb-3">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">⚡ Quick Actions</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-grid gap-2">
+                                        <a href="/add-transaction" class="btn btn-primary">
+                                            <i class="fas fa-plus"></i> Add Transaction
+                                        </a>
+                                        <a href="/transactions" class="btn btn-outline-secondary">
+                                            <i class="fas fa-list"></i> View All Transactions
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Top Categories -->
+                            @if (topCategories.Any())
+                            {
+                                <div class="card shadow">
+                                    <div class="card-header bg-light">
+                                        <h5 class="mb-0">🏆 Top Spending Categories</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        @foreach (var category in topCategories.Take(5))
+                                        {
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <div>
+                                                    <span class="badge bg-secondary">@category.Key</span>
+                                                </div>
+                                                <div>
+                                                    <strong class="text-danger">@category.Value.ToString("C")</strong>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <!-- No transactions yet -->
+                    <div class="row">
+                        <div class="col-md-8 mx-auto text-center">
+                            <div class="card">
+                                <div class="card-body py-5">
+                                    <i class="fas fa-chart-pie fa-4x text-muted mb-4"></i>
+                                    <h4>Ready to start tracking?</h4>
+                                    <p class="text-muted mb-4">Add your first transaction to see your financial dashboard come to life!</p>
+                                    <a href="/add-transaction" class="btn btn-primary btn-lg">
+                                        <i class="fas fa-plus"></i> Add Your First Transaction
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <!-- User not logged in - show welcome -->
+        <div class="container mt-5">
+            <div class="row justify-content-center">
+                <div class="col-md-8 text-center">
+                    <div class="card shadow-lg">
+                        <div class="card-body py-5">
+                            <i class="fas fa-wallet fa-4x text-primary mb-4"></i>
+                            <h1 class="display-4 mb-3">💰 BudgetTracker</h1>
+                            <p class="lead text-muted mb-4">
+                                Take control of your finances with our simple and powerful personal finance tracker.
+                            </p>
+
+                            <div class="row mb-4">
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center">
+                                        <i class="fas fa-plus-circle fa-2x text-success mb-2"></i>
+                                        <h5>Track Expenses</h5>
+                                        <p class="text-muted small">Easily log your income and expenses</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center">
+                                        <i class="fas fa-chart-line fa-2x text-info mb-2"></i>
+                                        <h5>View Insights</h5>
+                                        <p class="text-muted small">See where your money goes</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center">
+                                        <i class="fas fa-shield-alt fa-2x text-warning mb-2"></i>
+                                        <h5>Stay Secure</h5>
+                                        <p class="text-muted small">Your data is private and secure</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                                <a href="Identity/Account/Register" class="btn btn-primary btn-lg me-md-2">
+                                    <i class="fas fa-user-plus"></i> Get Started
+                                </a>
+                                <a href="Identity/Account/Login" class="btn btn-outline-secondary btn-lg">
+                                    <i class="fas fa-sign-in-alt"></i> Sign In
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<Transaction> transactions = new();
+    private List<Transaction> recentTransactions = new();
+    private bool isLoading = true;
+
+    // Summary data
+    private decimal totalIncome = 0;
+    private decimal totalExpenses = 0;
+    private decimal balance = 0;
+    private decimal monthlyIncome = 0;
+    private decimal monthlyExpenses = 0;
+    private int totalTransactions = 0;
+    private int thisMonthTransactions = 0;
+
+    // Category data
+    private Dictionary<string, decimal> topCategories = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+            if (authState.User.Identity?.IsAuthenticated == true)
+            {
+                var user = await UserManager.GetUserAsync(authState.User);
+
+                if (user != null)
+                {
+                    // Load all transactions for the user
+                    transactions = await DbContext.Transactions
+                        .Where(t => t.UserId == user.Id)
+                        .OrderByDescending(t => t.Date)
+                        .ThenByDescending(t => t.CreatedAt)
+                        .ToListAsync();
+
+                    // Calculate summary data
+                    CalculateSummaryData();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle error gracefully
+            transactions = new List<Transaction>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void CalculateSummaryData()
+    {
+        var currentMonth = DateTime.Now.Month;
+        var currentYear = DateTime.Now.Year;
+
+        // Overall totals
+        totalIncome = transactions.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
+        totalExpenses = transactions.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+        balance = totalIncome - totalExpenses;
+        totalTransactions = transactions.Count;
+
+        // This month totals
+        var thisMonth = transactions.Where(t => t.Date.Month == currentMonth && t.Date.Year == currentYear);
+        monthlyIncome = thisMonth.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
+        monthlyExpenses = thisMonth.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+        thisMonthTransactions = thisMonth.Count();
+
+        // Recent transactions (last 5)
+        recentTransactions = transactions.Take(5).ToList();
+
+        // Top expense categories
+        topCategories = transactions
+            .Where(t => t.Type == TransactionType.Expense)
+            .GroupBy(t => t.Category)
+            .ToDictionary(g => g.Key, g => g.Sum(t => t.Amount))
+            .OrderByDescending(kvp => kvp.Value)
+            .Take(5)
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    }
+}
